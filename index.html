@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>即時搶答 Pro - 部署版</title>
+    <title>即時搶答 Pro</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React & ReactDOM -->
@@ -30,7 +30,6 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
         // --- 安全的 Firebase 配置解析 ---
-        // 修正：在 GitHub Pages 上 __firebase_config 會是 undefined，因此我們提供您的專案預設值
         const getSafeConfig = () => {
             const defaultConfig = {
                 apiKey: "AIzaSyDVnsq7dtYXY3Ladh891OBPsGF99zBeBWw",
@@ -60,10 +59,8 @@
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'quiz-pro-v1';
         const ADMIN_PASSWORD = '1234';
 
-        // 符合規則 1 的路徑定義
         const getCollectionPath = (name) => ['artifacts', appId, 'public', 'data', name];
 
-        // --- 輔助函式：動態載入 SheetJS ---
         const ensureXLSX = () => {
             return new Promise((resolve) => {
                 if (window.XLSX) return resolve(window.XLSX);
@@ -76,7 +73,6 @@
 
         const { useState, useEffect, useMemo, useRef } = React;
 
-        // 圖示元件修正
         const Icon = ({ name, size = 20, className = "" }) => {
             const iconRef = useRef(null);
             useEffect(() => {
@@ -106,7 +102,6 @@
             const [questions, setQuestions] = useState([]);
             const [responses, setResponses] = useState([]);
 
-            // 1. 初始化身分驗證 (符合規則 3)
             useEffect(() => {
                 const initAuth = async () => {
                     try {
@@ -123,7 +118,6 @@
                 return onAuthStateChanged(auth, setUser);
             }, []);
 
-            // 2. 監聽 Firestore 資料
             useEffect(() => {
                 if (!user || !db) return;
 
@@ -147,7 +141,6 @@
                 return () => { unsubConfig(); unsubQuestions(); unsubResponses(); };
             }, [user]);
 
-            // 3. 數據統計邏輯
             const cumulativeRanking = useMemo(() => {
                 const stats = {};
                 responses.forEach(r => {
@@ -205,8 +198,8 @@
 
                         {view === 'home' && (
                             <div className="py-12 flex flex-col items-center">
-                                <div className="bg-white p-10 rounded-[3rem] shadow-xl w-full max-w-md text-center border border-white">
-                                    <div className="w-24 h-24 bg-teal-50 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner">
+                                <div className="bg-white p-10 rounded-[3rem] shadow-xl w-full max-w-md text-center border border-white text-center">
+                                    <div className="w-24 h-24 bg-teal-50 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner text-center">
                                         <Icon name="crown" size={48} className="text-teal-500" />
                                     </div>
                                     <h2 className="text-3xl font-black mb-2 text-slate-800 text-center">歡迎參與</h2>
@@ -273,7 +266,7 @@
             return (
                 <div className="py-12 flex justify-center text-center">
                     <div className="bg-white p-10 rounded-[3rem] shadow-xl w-full max-w-md text-center border border-white">
-                        <div className="w-20 h-20 bg-purple-50 rounded-full flex items-center justify-center mx-auto mb-8 text-purple-600 shadow-inner">
+                        <div className="w-20 h-20 bg-purple-50 rounded-full flex items-center justify-center mx-auto mb-8 text-purple-600 shadow-inner text-center">
                             <Icon name="shield-check" size={40} />
                         </div>
                         <h2 className="text-2xl font-black mb-8 text-slate-800 text-center">管理端驗證</h2>
@@ -319,7 +312,7 @@
 
             const downloadTemplate = async () => {
                 const XLSX = await ensureXLSX();
-                const data = [["題目敘述", "選項 A", "選項 B", "選項 C", "選項 D", "正確答案索引 (0-3)"]];
+                const data = [["題目敘述", "選項 A", "選項 B", "選項 C", "選項 D", "正確答案 (請填A-D)"]];
                 const ws = XLSX.utils.aoa_to_sheet(data);
                 const wb = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(wb, ws, "題庫範本");
@@ -338,14 +331,20 @@
                         const ws = wb.Sheets[wb.SheetNames[0]];
                         const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
                         const batch = writeBatch(db);
+                        const letterToIdx = { 'A': 0, 'B': 1, 'C': 2, 'D': 3 };
                         let addedCount = 0;
                         data.slice(1).forEach((row, i) => {
                             if (!row[0]) return;
                             const newDocRef = doc(collection(db, ...getCollectionPath('questions')));
+                            
+                            // 處理答案：支援 A-D 或是原始數字索引
+                            const rawAns = String(row[5] || "").trim().toUpperCase();
+                            const ansIdx = letterToIdx[rawAns] !== undefined ? letterToIdx[rawAns] : (parseInt(row[5]) || 0);
+
                             batch.set(newDocRef, {
                                 text: String(row[0]),
                                 options: [String(row[1] || ""), String(row[2] || ""), String(row[3] || ""), String(row[4] || "")],
-                                correctAnswer: parseInt(row[5]) || 0,
+                                correctAnswer: ansIdx,
                                 order: questions.length + i
                             });
                             addedCount++;
@@ -369,10 +368,10 @@
                     <section className="bg-white p-8 rounded-[3.5rem] shadow-xl border border-slate-100 flex flex-col md:flex-row gap-10">
                         <div className="flex-1 space-y-8 text-left">
                             <div className="flex items-center gap-5 text-left">
-                                <div className="p-5 bg-teal-50 rounded-[2rem] text-teal-500 shadow-inner"><Icon name="settings" size={32} /></div>
+                                <div className="p-5 bg-teal-50 rounded-[2rem] text-teal-500 shadow-inner text-left"><Icon name="settings" size={32} /></div>
                                 <div className="text-left">
-                                    <h3 className="text-2xl font-black text-slate-800">活動狀態設定</h3>
-                                    <p className="text-xs text-slate-400 font-black uppercase tracking-widest mt-1">Live Controls</p>
+                                    <h3 className="text-2xl font-black text-slate-800 text-left">活動狀態設定</h3>
+                                    <p className="text-xs text-slate-400 font-black uppercase tracking-widest mt-1 text-left">Live Controls</p>
                                 </div>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left">
@@ -458,20 +457,20 @@
 
                     {isModalOpen && (
                         <div className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-xl flex items-center justify-center p-6 text-left">
-                            <div className="bg-white w-full max-w-xl rounded-[3.5rem] shadow-2xl overflow-hidden text-left">
+                            <div className="bg-white w-full max-w-xl rounded-[3.5rem] shadow-2xl overflow-hidden text-left text-left text-left">
                                 <div className="bg-teal-500 p-10 text-white relative text-left">
                                     <h3 className="text-3xl font-black flex items-center gap-3 text-left"><Icon name="edit-3" /> {editId ? '修改題目' : '新增題目'}</h3>
-                                    <button onClick={() => { setIsModalOpen(false); setEditId(null); }} className="absolute top-10 right-10 text-white/50 hover:text-white transition-all text-left"><Icon name="x" size={32} /></button>
+                                    <button onClick={() => { setIsModalOpen(false); setEditId(null); }} className="absolute top-10 right-10 text-white/50 hover:text-white transition-all text-left text-left"><Icon name="x" size={32} /></button>
                                 </div>
-                                <div className="p-10 space-y-8 text-left">
-                                    <div className="space-y-2 text-left">
+                                <div className="p-10 space-y-8 text-left text-left">
+                                    <div className="space-y-2 text-left text-left text-left">
                                         <label className="text-xs font-black text-slate-400 uppercase tracking-widest px-2 text-left">題目描述</label>
                                         <textarea value={form.text} onChange={e => setForm({...form, text: e.target.value})} className="w-full p-6 rounded-3xl border-2 border-slate-50 bg-slate-50 focus:border-teal-500 outline-none font-bold text-lg text-left" rows="2" />
                                     </div>
-                                    <div className="space-y-3 text-left">
-                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest px-2 text-left">選項內容與正確答案</label>
+                                    <div className="space-y-3 text-left text-left">
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest px-2 text-left text-left">選項內容與正確答案</label>
                                         {form.options.map((opt, idx) => (
-                                            <div key={idx} className="flex gap-3 items-center text-left">
+                                            <div key={idx} className="flex gap-3 items-center text-left text-left">
                                                 <button onClick={() => setForm({...form, correctAnswer: idx})} className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl transition-all ${form.correctAnswer === idx ? 'bg-teal-500 text-white shadow-lg' : 'bg-slate-50 text-slate-300 hover:bg-slate-100'}`}>{String.fromCharCode(65+idx)}</button>
                                                 <input value={opt} onChange={e => {
                                                     const newOpts = [...form.options]; newOpts[idx] = e.target.value;
@@ -480,7 +479,7 @@
                                             </div>
                                         ))}
                                     </div>
-                                    <div className="flex gap-4 pt-4 text-left">
+                                    <div className="flex gap-4 pt-4 text-left text-left">
                                         <button onClick={() => { setIsModalOpen(false); setEditId(null); }} className="flex-1 py-5 bg-slate-50 text-slate-400 rounded-3xl font-black text-lg hover:bg-slate-100 transition-all text-center">取消</button>
                                         <button onClick={saveQuestion} className="flex-1 py-5 bg-teal-500 text-white rounded-3xl font-black text-lg shadow-xl shadow-teal-100 text-center">儲存題庫</button>
                                     </div>
@@ -526,12 +525,12 @@
 
             if (gameState.showFinalResults) {
                 return (
-                    <div className="space-y-8 text-center">
-                        <div className="text-center">
-                            <Icon name="trophy" size={80} className="text-yellow-500 mx-auto drop-shadow-xl animate-bounce mb-4" />
-                            <h2 className="text-4xl font-black text-slate-800 text-center">最終結算排行榜</h2>
+                    <div className="space-y-8 text-center text-center">
+                        <div className="text-center text-center">
+                            <Icon name="trophy" size={80} className="text-yellow-500 mx-auto drop-shadow-xl animate-bounce mb-4 text-center" />
+                            <h2 className="text-4xl font-black text-slate-800 text-center text-center">最終結算排行榜</h2>
                         </div>
-                        <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-teal-50 text-left">
+                        <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-teal-50 text-left text-left">
                             <LeaderboardDisplay mode={gameState.rankingMode} ranking={cumulativeRanking} winners={winnersPerQuestion} />
                         </div>
                     </div>
@@ -540,46 +539,46 @@
 
             if (gameState.status === 'active' && gameState.activeQuestionId && !q) {
                 return (
-                    <div className="py-32 bg-white rounded-[4rem] border border-teal-50 text-center flex flex-col items-center shadow-2xl">
-                        <Icon name="loader-2" size={48} className="text-teal-500 animate-spin mb-4" />
-                        <h2 className="text-xl font-bold text-slate-400 text-center">正在讀取題目資料...</h2>
+                    <div className="py-32 bg-white rounded-[4rem] border border-teal-50 text-center flex flex-col items-center shadow-2xl text-center">
+                        <Icon name="loader-2" size={48} className="text-teal-500 animate-spin mb-4 text-center" />
+                        <h2 className="text-xl font-bold text-slate-400 text-center text-center text-center">正在讀取題目資料...</h2>
                     </div>
                 );
             }
 
             if (gameState.status === 'idle' || !q) {
                 return (
-                    <div className="py-32 bg-white rounded-[4rem] border border-teal-50 text-center flex flex-col items-center shadow-2xl text-center">
-                        <div className="relative mb-10 text-center">
-                            <div className="absolute inset-0 bg-teal-100 rounded-full animate-ping opacity-20 scale-150"></div>
-                            <Icon name="loader-2" size={80} className="text-teal-500 animate-spin" />
+                    <div className="py-32 bg-white rounded-[4rem] border border-teal-50 text-center flex flex-col items-center shadow-2xl text-center text-center">
+                        <div className="relative mb-10 text-center text-center">
+                            <div className="absolute inset-0 bg-teal-100 rounded-full animate-ping opacity-20 scale-150 text-center"></div>
+                            <Icon name="loader-2" size={80} className="text-teal-500 animate-spin text-center" />
                         </div>
-                        <h2 className="text-3xl font-black text-slate-800 text-center">等待主持人出題...</h2>
-                        <p className="text-slate-400 mt-6 font-bold text-xl tracking-widest uppercase flex items-center gap-2 justify-center text-center">
-                            <Icon name="user" size={20} className="text-teal-500" /> Hello {userName}
+                        <h2 className="text-3xl font-black text-slate-800 text-center text-center">等待主持人出題...</h2>
+                        <p className="text-slate-400 mt-6 font-bold text-xl tracking-widest uppercase flex items-center gap-2 justify-center text-center text-center">
+                            <Icon name="user" size={20} className="text-teal-500 text-center" /> Hello {userName}
                         </p>
                     </div>
                 );
             }
 
             return (
-                <div className="space-y-8 relative text-left">
+                <div className="space-y-8 relative text-left text-left">
                     {countdown > 0 && (
-                        <div className="fixed inset-0 z-[100] bg-teal-500/95 flex flex-col items-center justify-center text-white backdrop-blur-2xl text-center">
-                            <div className="text-[15rem] font-black animate-pulse leading-none text-center">{countdown}</div>
-                            <div className="text-4xl font-black tracking-[0.5em] mt-8 text-center uppercase">準備搶答</div>
+                        <div className="fixed inset-0 z-[100] bg-teal-500/95 flex flex-col items-center justify-center text-white backdrop-blur-2xl text-center text-center">
+                            <div className="text-[15rem] font-black animate-pulse leading-none text-center text-center">{countdown}</div>
+                            <div className="text-4xl font-black tracking-[0.5em] mt-8 text-center uppercase text-center">準備搶答</div>
                         </div>
                     )}
 
-                    <div className="bg-white p-8 sm:p-12 rounded-[3.5rem] shadow-2xl border-t-[16px] border-teal-500 text-left">
-                        <div className="flex justify-between items-center mb-10 text-left">
-                            <span className="px-5 py-2 bg-teal-50 text-teal-600 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-2 text-left">
-                                <Icon name="timer" size={16} className="animate-pulse" /> 搶答中
+                    <div className="bg-white p-8 sm:p-12 rounded-[3.5rem] shadow-2xl border-t-[16px] border-teal-500 text-left text-left">
+                        <div className="flex justify-between items-center mb-10 text-left text-left">
+                            <span className="px-5 py-2 bg-teal-50 text-teal-600 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-2 text-left text-left text-left text-left">
+                                <Icon name="timer" size={16} className="animate-pulse text-left" /> 搶答中
                             </span>
-                            <span className="text-sm font-black text-slate-400 flex items-center gap-2 text-left"><Icon name="user" size={18} /> {userName}</span>
+                            <span className="text-sm font-black text-slate-400 flex items-center gap-2 text-left text-left"><Icon name="user" size={18} /> {userName}</span>
                         </div>
-                        <h2 className="text-3xl sm:text-4xl font-black mb-12 text-slate-800 leading-snug text-left">{q.text}</h2>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 text-left">
+                        <h2 className="text-3xl sm:text-4xl font-black mb-12 text-slate-800 leading-snug text-left text-left">{q.text}</h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 text-left text-left">
                             {q.options.map((opt, i) => (
                                 <button 
                                     key={i} 
@@ -599,9 +598,9 @@
                         </div>
                     </div>
 
-                    <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-slate-50 text-left">
-                        <h3 className="text-xl font-black mb-8 flex items-center gap-3 border-b border-slate-50 pb-6 text-slate-800 text-left">
-                            <Icon name="layout-list" className="text-blue-500" /> 即時答題看板
+                    <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-slate-50 text-left text-left">
+                        <h3 className="text-xl font-black mb-8 flex items-center gap-3 border-b border-slate-50 pb-6 text-slate-800 text-left text-left text-left text-left">
+                            <Icon name="layout-list" className="text-blue-500 text-left" /> 即時答題看板
                         </h3>
                         <LeaderboardDisplay mode={gameState.rankingMode} ranking={cumulativeRanking} winners={winnersPerQuestion} />
                     </div>
@@ -612,40 +611,40 @@
         function LeaderboardDisplay({ mode, ranking, winners }) {
             if (mode === 'cumulative') {
                 return (
-                    <div className="space-y-4 text-left">
+                    <div className="space-y-4 text-left text-left text-left">
                         {ranking.map((res, i) => (
-                            <div key={res.userName} className="flex justify-between items-center p-6 bg-slate-50 rounded-[2.5rem] border border-white hover:bg-white hover:shadow-lg transition-all text-left">
-                                <div className="flex items-center gap-6 text-left">
-                                    <div className={`w-12 h-12 rounded-full flex items-center justify-center font-black text-xl shadow-md text-left ${i===0?'bg-yellow-400 text-white':i===1?'bg-slate-300 text-white':i===2?'bg-orange-300 text-white':'bg-white text-slate-300 border'}`}>{i+1}</div>
-                                    <div className="text-left">
-                                        <span className="font-black text-slate-700 text-2xl text-left">{res.userName}</span>
-                                        <div className="text-[10px] font-bold text-slate-300 uppercase tracking-tighter mt-0.5 text-left">累積耗時: {(res.totalTime/1000).toFixed(2)}s</div>
+                            <div key={res.userName} className="flex justify-between items-center p-6 bg-slate-50 rounded-[2.5rem] border border-white hover:bg-white hover:shadow-lg transition-all text-left text-left text-left text-left">
+                                <div className="flex items-center gap-6 text-left text-left text-left text-left">
+                                    <div className={`w-12 h-12 rounded-full flex items-center justify-center font-black text-xl shadow-md text-left text-left text-left ${i===0?'bg-yellow-400 text-white':i===1?'bg-slate-300 text-white':i===2?'bg-orange-300 text-white':'bg-white text-slate-300 border text-left'}`}>{i+1}</div>
+                                    <div className="text-left text-left text-left text-left text-left">
+                                        <span className="font-black text-slate-700 text-2xl text-left text-left text-left text-left">{res.userName}</span>
+                                        <div className="text-[10px] font-bold text-slate-300 uppercase tracking-tighter mt-0.5 text-left text-left text-left text-left">累積耗時: {(res.totalTime/1000).toFixed(2)}s</div>
                                     </div>
                                 </div>
-                                <div className="font-black text-teal-600 text-4xl text-right">{res.correctCount} <span className="text-sm font-bold text-slate-300">題</span></div>
+                                <div className="font-black text-teal-600 text-4xl text-right text-right text-right">{res.correctCount} <span className="text-sm font-bold text-slate-300 text-right">題</span></div>
                             </div>
                         ))}
-                        {ranking.length === 0 && <div className="py-20 text-slate-300 font-black italic text-center text-center">目前暫無答題紀錄</div>}
+                        {ranking.length === 0 && <div className="py-20 text-slate-300 font-black italic text-center text-center text-center text-center">目前暫無答題紀錄</div>}
                     </div>
                 );
             }
 
             return (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 text-left">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 text-left text-left text-left text-left">
                     {winners.map((w, i) => (
-                        <div key={i} className="p-6 border-2 border-slate-50 rounded-[2.5rem] bg-slate-50/50 hover:bg-white transition-all text-left">
-                            <div className="text-[10px] font-black text-teal-500 mb-3 uppercase tracking-widest text-left">Question {w.questionIndex}</div>
-                            <h4 className="font-bold text-slate-800 line-clamp-1 mb-6 text-left">{w.text}</h4>
+                        <div key={i} className="p-6 border-2 border-slate-50 rounded-[2.5rem] bg-slate-50/50 hover:bg-white transition-all text-left text-left text-left text-left text-left">
+                            <div className="text-[10px] font-black text-teal-500 mb-3 uppercase tracking-widest text-left text-left text-left text-left text-left text-left">Question {w.questionIndex}</div>
+                            <h4 className="font-bold text-slate-800 line-clamp-1 mb-6 text-left text-left text-left text-left">{w.text}</h4>
                             {w.winner ? (
-                                <div className="bg-teal-50 p-4 rounded-3xl flex items-center gap-4 border border-teal-100 text-left">
-                                    <div className="p-3 bg-teal-500 rounded-2xl text-white shadow-md text-left"><Icon name="crown" size={20} /></div>
-                                    <div className="min-w-0 text-left">
-                                        <div className="font-black text-slate-800 text-lg truncate leading-tight text-left">{w.winner.userName}</div>
-                                        <div className="text-[10px] font-bold text-teal-500 uppercase tracking-tighter mt-0.5 text-left">{(w.winner.timeTaken/1000).toFixed(3)}s</div>
+                                <div className="bg-teal-50 p-4 rounded-3xl flex items-center gap-4 border border-teal-100 text-left text-left text-left text-left text-left">
+                                    <div className="p-3 bg-teal-500 rounded-2xl text-white shadow-md text-left text-left text-left text-left text-left text-left text-left text-left text-left"><Icon name="crown" size={20} className="text-left" /></div>
+                                    <div className="min-w-0 text-left text-left text-left text-left text-left">
+                                        <div className="font-black text-slate-800 text-lg truncate leading-tight text-left text-left text-left text-left text-left">{w.winner.userName}</div>
+                                        <div className="text-[10px] font-bold text-teal-500 uppercase tracking-tighter mt-0.5 text-left text-left text-left text-left text-left">{(w.winner.timeTaken/1000).toFixed(3)}s</div>
                                     </div>
                                 </div>
                             ) : (
-                                <div className="py-6 text-center text-slate-200 text-sm font-black italic border-2 border-dotted rounded-3xl text-center">待揭曉</div>
+                                <div className="py-6 text-center text-slate-200 text-sm font-black italic border-2 border-dotted rounded-3xl text-center text-center text-center text-center text-center">待揭曉</div>
                             )}
                         </div>
                     ))}
