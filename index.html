@@ -27,6 +27,7 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
+        .connection-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 selection:bg-teal-100">
@@ -37,12 +38,6 @@
         import { getFirestore, collection, doc, onSnapshot, setDoc, addDoc, updateDoc, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-        /**
-         * 安全性宣告 (Security Status):
-         * 1. 網域限制 (Domain Restricted): 僅限 https://frances-hjc.github.io/*
-         * 2. API 限制 (API Restricted): 僅限 Identity Toolkit, Firestore, Token Service。
-         * 3. 權限防護 (Auth Guard): Firestore 監聽器僅在匿名登入成功後啟動，防止 Permission Denied。
-         */
         const getSafeConfig = () => {
             const defaultConfig = {
                 apiKey: "AIzaSyDVnsq7dtYXY3Ladh891OBPsGF99zBeBWw",
@@ -70,11 +65,9 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
         
-        // 優先使用環境提供的 appId
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'quiz-pro-v1'; 
         const ADMIN_PASSWORD = '1234';
 
-        // 符合路徑規則：/artifacts/{appId}/public/data/{collection}
         const getCollectionPath = (name) => ['artifacts', appId, 'public', 'data', name];
 
         const ensureXLSX = () => {
@@ -118,7 +111,6 @@
             const [questions, setQuestions] = useState([]);
             const [responses, setResponses] = useState([]);
 
-            // 1. 初始化身分驗證 (Auth First)
             useEffect(() => {
                 const initAuth = async () => {
                     try {
@@ -136,7 +128,6 @@
                 return onAuthStateChanged(auth, setUser);
             }, []);
 
-            // 2. 監聽 Firestore 資料 (Only if user exists)
             useEffect(() => {
                 if (!user || !db) return;
 
@@ -167,12 +158,9 @@
                 return () => { unsubConfig(); unsubQuestions(); unsubResponses(); };
             }, [user]);
 
-            // 強力重置功能：包含清空所有人的回答記錄
             const resetRoom = async () => {
                 if (!confirm("確定要重置所有狀態並「清空所有人的答題紀錄」嗎？此動作無法復原。")) return;
-                
                 try {
-                    // 1. 重置房間狀態
                     await updateDoc(doc(db, ...getCollectionPath('config'), 'state'), {
                         activeQuestionId: null,
                         status: 'idle',
@@ -180,18 +168,15 @@
                         rankingMode: 'cumulative',
                         showFinalResults: false
                     });
-
-                    // 2. 批量刪除所有回答記錄 (Firestore Batch)
                     const batch = writeBatch(db);
                     responses.forEach(r => {
                         batch.delete(doc(db, ...getCollectionPath('responses'), r.id));
                     });
                     await batch.commit();
-                    
                     alert("房間已完全重置，參與者現在可以重新答題。");
                 } catch (e) {
                     console.error("Reset error:", e);
-                    alert("重置失敗，請檢查網路連線。");
+                    alert("重置失敗。");
                 }
             };
 
@@ -219,7 +204,7 @@
 
             return (
                 <div className="min-h-screen flex flex-col">
-                    <nav className="bg-white/90 backdrop-blur-md sticky top-0 z-50 border-b px-6 py-4 flex justify-between items-center shadow-sm">
+                    <nav className="bg-white/90 backdrop-blur-md sticky top-0 z-50 border-b px-6 py-4 flex justify-between items-center shadow-sm text-left">
                         <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setView('home')}>
                             <div className="bg-teal-500 p-2 rounded-xl text-white shadow-lg transition-transform group-hover:scale-110">
                                 <Icon name="zap" />
@@ -247,18 +232,18 @@
                         {view === 'home' && (
                             <div className="py-12 flex flex-col items-center">
                                 <div className="bg-white p-10 rounded-[3rem] shadow-xl w-full max-w-md text-center border border-white">
-                                    <div className="w-24 h-24 bg-teal-50 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner text-center">
+                                    <div className="w-24 h-24 bg-teal-50 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner">
                                         <Icon name="crown" size={48} className="text-teal-500" />
                                     </div>
-                                    <h2 className="text-3xl font-black mb-2 text-slate-800 text-center">歡迎參與</h2>
-                                    <p className="text-slate-500 mb-10 font-medium text-center">請輸入您的名稱以加入搶答活動</p>
+                                    <h2 className="text-3xl font-black mb-2 text-slate-800">歡迎參與</h2>
+                                    <p className="text-slate-500 mb-10 font-medium">請輸入您的名稱以加入搶答活動</p>
                                     <div className="relative mb-8 text-left">
                                         <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300">
                                             <Icon name="user" size={24} />
                                         </div>
                                         <input value={userName} onChange={e => setUserName(e.target.value)} placeholder="您的稱呼..." className="w-full pl-16 pr-6 py-5 rounded-3xl border-2 border-slate-50 bg-slate-50 text-center font-bold text-2xl focus:border-teal-500 outline-none transition-all shadow-sm" />
                                     </div>
-                                    <button onClick={() => { if(userName.trim()) { localStorage.setItem('quiz_name', userName); setView('participant'); } }} className="w-full bg-gradient-to-r from-teal-500 to-blue-600 text-white p-5 rounded-3xl font-black text-xl shadow-xl hover:opacity-95 active:scale-95 transition-all flex items-center justify-center gap-3">
+                                    <button onClick={() => { if(userName.trim()) { localStorage.setItem('quiz_name', userName); setView('participant'); } }} className="w-full bg-gradient-to-r from-teal-500 to-blue-600 text-white p-5 rounded-3xl font-black text-xl shadow-xl hover:opacity-95 active:scale-95 transition-all flex items-center justify-center gap-3 text-center">
                                         <Icon name="log-in" size={24} /> 進入房間
                                     </button>
                                 </div>
@@ -279,6 +264,7 @@
                                     winnersPerQuestion={winnersPerQuestion} 
                                     updateConfig={(updates) => updateDoc(doc(db, ...getCollectionPath('config'), 'state'), updates)}
                                     resetRoom={resetRoom}
+                                    dbStatus={dbStatus}
                                 />
                             ) : (
                                 <AdminAuthView onAuth={() => setIsAdminAuth(true)} />
@@ -294,10 +280,10 @@
             return (
                 <div className="py-12 flex justify-center text-center">
                     <div className="bg-white p-10 rounded-[3rem] shadow-xl w-full max-w-md text-center border border-white">
-                        <div className="w-20 h-20 bg-purple-50 rounded-full flex items-center justify-center mx-auto mb-8 text-purple-600 shadow-inner text-center">
+                        <div className="w-20 h-20 bg-purple-50 rounded-full flex items-center justify-center mx-auto mb-8 text-purple-600 shadow-inner">
                             <Icon name="shield-check" size={40} />
                         </div>
-                        <h2 className="text-2xl font-black mb-8 text-slate-800 text-center">管理端驗證</h2>
+                        <h2 className="text-2xl font-black mb-8 text-slate-800">管理端驗證</h2>
                         <div className="relative mb-8 text-left">
                             <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300">
                                 <Icon name="lock" size={24} />
@@ -312,21 +298,22 @@
             );
         }
 
-        function AdminDashboard({ gameState, questions, responses, cumulativeRanking, winnersPerQuestion, updateConfig, resetRoom }) {
+        function AdminDashboard({ gameState, questions, responses, cumulativeRanking, winnersPerQuestion, updateConfig, resetRoom, dbStatus }) {
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [form, setForm] = useState({ text: '', options: ['', '', '', ''], correctAnswer: 0 });
             const [editId, setEditId] = useState(null);
             const [isImporting, setIsImporting] = useState(false);
 
+            const usageSeverity = useMemo(() => {
+                if (responses.length > 500) return 'red';
+                if (responses.length > 200) return 'amber';
+                return 'green';
+            }, [responses]);
+
             const saveQuestion = async () => {
-                if (editId) {
-                    await updateDoc(doc(db, ...getCollectionPath('questions'), editId), form);
-                } else {
-                    await addDoc(collection(db, ...getCollectionPath('questions')), { ...form, order: questions.length });
-                }
-                setIsModalOpen(false);
-                setEditId(null);
-                setForm({ text: '', options: ['', '', '', ''], correctAnswer: 0 });
+                if (editId) await updateDoc(doc(db, ...getCollectionPath('questions'), editId), form);
+                else await addDoc(collection(db, ...getCollectionPath('questions')), { ...form, order: questions.length });
+                setIsModalOpen(false); setEditId(null); setForm({ text: '', options: ['', '', '', ''], correctAnswer: 0 });
             };
 
             const downloadTemplate = async () => {
@@ -351,56 +338,66 @@
                         const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
                         const batch = writeBatch(db);
                         const letterToIdx = { 'A': 0, 'B': 1, 'C': 2, 'D': 3 };
-                        let addedCount = 0;
                         data.slice(1).forEach((row, i) => {
                             if (!row[0]) return;
                             const newDocRef = doc(collection(db, ...getCollectionPath('questions')));
                             const rawAns = String(row[5] || "").trim().toUpperCase();
                             const ansIdx = letterToIdx[rawAns] !== undefined ? letterToIdx[rawAns] : (parseInt(row[5]) || 0);
-
                             batch.set(newDocRef, {
                                 text: String(row[0]),
                                 options: [String(row[1] || ""), String(row[2] || ""), String(row[3] || ""), String(row[4] || "")],
-                                correctAnswer: ansIdx,
-                                order: questions.length + i
+                                correctAnswer: ansIdx, order: questions.length + i
                             });
-                            addedCount++;
                         });
-                        if (addedCount > 0) {
-                            await batch.commit();
-                            alert(`成功匯入 ${addedCount} 題！`);
-                        }
-                    } catch (err) {
-                        alert("匯入失敗，請檢查檔案格式。");
-                    } finally {
-                        setIsImporting(false);
-                        e.target.value = '';
-                    }
+                        await batch.commit(); alert(`匯入成功！`);
+                    } catch (err) { alert("匯入失敗"); } finally { setIsImporting(false); e.target.value = ''; }
                 };
                 reader.readAsBinaryString(file);
             };
 
             return (
-                <div className="space-y-12 pb-24 text-left">
-                    <section className="bg-white p-8 rounded-[3.5rem] shadow-xl border border-slate-100 flex flex-col md:flex-row gap-10">
-                        <div className="flex-1 space-y-8 text-left">
-                            <div className="flex items-center gap-5">
-                                <div className="p-5 bg-teal-50 rounded-[2rem] text-teal-500 shadow-inner"><Icon name="settings" size={32} /></div>
-                                <div>
-                                    <h3 className="text-2xl font-black text-slate-800">活動狀態設定</h3>
-                                    <p className="text-xs text-slate-400 font-black uppercase tracking-widest mt-1">Live Controls</p>
+                <div className="space-y-6 pb-24 text-left">
+                    {/* 精簡型系統監控 */}
+                    <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-3 bg-white rounded-3xl border border-slate-100 shadow-sm text-left">
+                        <div className="flex items-center gap-4 text-left text-left text-left">
+                            <div className="flex items-center gap-2 text-left">
+                                <span className={`connection-dot ${dbStatus === 'online' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]' : 'bg-red-500 animate-pulse'}`}></span>
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{dbStatus}</span>
+                            </div>
+                            <div className="h-4 w-[1px] bg-slate-100 text-left"></div>
+                            <div className="flex items-center gap-2 text-left">
+                                <Icon name="database" size={12} className="text-slate-300 text-left" />
+                                <span className={`text-[10px] font-black uppercase tracking-widest text-left ${usageSeverity === 'red' ? 'text-red-500' : usageSeverity === 'amber' ? 'text-amber-500' : 'text-teal-500'}`}>
+                                    Usage {usageSeverity === 'green' ? 'Safe' : usageSeverity === 'amber' ? 'High' : 'Critical'} ({responses.length})
+                                </span>
+                            </div>
+                        </div>
+                        {usageSeverity !== 'green' && (
+                            <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-3 py-1 rounded-full animate-pulse text-left text-left">建議適時點擊重置以節省額度</span>
+                        )}
+                    </div>
+
+                    <section className="bg-white p-8 rounded-[3.5rem] shadow-xl border border-slate-100 flex flex-col md:flex-row gap-10 text-left text-left text-left text-left">
+                        <div className="flex-1 space-y-8 text-left text-left text-left text-left">
+                            <div className="flex items-center gap-5 text-left">
+                                <div className="p-5 bg-teal-50 rounded-[2rem] text-teal-500 shadow-inner text-left"><Icon name="settings" size={32} /></div>
+                                <div className="text-left text-left text-left">
+                                    <h3 className="text-2xl font-black text-slate-800 text-left">活動狀態設定</h3>
+                                    <p className="text-xs text-slate-400 font-black uppercase tracking-widest mt-1 text-left text-left text-left">Live Controls</p>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div onClick={() => updateConfig({ rankingMode: 'cumulative' })} className={`p-6 border-4 rounded-3xl cursor-pointer transition-all ${gameState.rankingMode==='cumulative'?'border-teal-500 bg-teal-50 shadow-inner':'border-slate-50 bg-slate-50'}`}>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left text-left text-left text-left">
+                                <div onClick={() => updateConfig({ rankingMode: 'cumulative' })} className={`p-6 border-4 rounded-3xl cursor-pointer transition-all flex flex-col gap-2 ${gameState.rankingMode==='cumulative'?'border-teal-500 bg-teal-50 shadow-inner':'border-slate-50 bg-slate-50'}`}>
                                     <div className="flex items-center gap-3 font-black text-slate-700 text-left"><Icon name="medal" /> 累積計分</div>
+                                    <p className="text-xs text-slate-400 leading-relaxed font-medium text-left text-left">以「答對總數」排名；若題數相同，則比較「答對題目的總耗時」（愈短愈好）。適合多回合聯賽。</p>
                                 </div>
-                                <div onClick={() => updateConfig({ rankingMode: 'winnersPerQuestion' })} className={`p-6 border-4 rounded-3xl cursor-pointer transition-all ${gameState.rankingMode==='winnersPerQuestion'?'border-teal-500 bg-teal-50 shadow-inner':'border-slate-50 bg-slate-50'}`}>
-                                    <div className="flex items-center gap-3 font-black text-slate-700 text-left text-left"><Icon name="zap" /> 每題最速</div>
+                                <div onClick={() => updateConfig({ rankingMode: 'winnersPerQuestion' })} className={`p-6 border-4 rounded-3xl cursor-pointer transition-all flex flex-col gap-2 ${gameState.rankingMode==='winnersPerQuestion'?'border-teal-500 bg-teal-50 shadow-inner':'border-slate-50 bg-slate-50'}`}>
+                                    <div className="flex items-center gap-3 font-black text-slate-700 text-left"><Icon name="zap" /> 每題最速王</div>
+                                    <p className="text-xs text-slate-400 leading-relaxed font-medium text-left">僅表揚每一題「第一位答對」的參與者。排行榜將顯示每題的贏家。適合單題獨立頒獎。</p>
                                 </div>
                             </div>
                         </div>
-                        <div className="md:w-64 flex flex-col gap-3 justify-center text-left">
+                        <div className="md:w-64 flex flex-col gap-3 justify-center text-left text-left">
                             <button onClick={() => updateConfig({ showFinalResults: !gameState.showFinalResults })} className={`w-full py-5 rounded-2xl font-black text-lg shadow-xl transition-all flex items-center justify-center gap-3 ${gameState.showFinalResults ? 'bg-orange-500 text-white' : 'bg-slate-800 text-white'}`}>
                                 <Icon name={gameState.showFinalResults ? "x" : "trophy"} /> {gameState.showFinalResults ? '關閉排行結算' : '開啟最終排行'}
                             </button>
@@ -411,14 +408,14 @@
                     </section>
 
                     <section className="space-y-6 text-left">
-                        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center px-4 gap-4">
-                            <h3 className="font-black text-2xl text-slate-800 flex items-center gap-3"><Icon name="layout-list" className="text-teal-500" /> 題庫管理 ({questions.length})</h3>
-                            <div className="flex flex-wrap gap-2">
-                                <button onClick={downloadTemplate} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-slate-200 transition-all">
+                        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center px-4 gap-4 text-left">
+                            <h3 className="font-black text-2xl text-slate-800 flex items-center gap-3 text-left"><Icon name="layout-list" className="text-teal-500 text-left text-left" /> 題庫管理 ({questions.length})</h3>
+                            <div className="flex flex-wrap gap-2 text-left">
+                                <button onClick={downloadTemplate} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-slate-200 transition-all text-left">
                                     <Icon name="file-down" size={18} /> 下載範本
                                 </button>
                                 <label className={`px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 cursor-pointer transition-all ${isImporting ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-600 hover:bg-blue-100 shadow-sm'}`}>
-                                    {isImporting ? <Icon name="loader-2" className="animate-spin" size={18} /> : <Icon name="file-up" size={18} />}
+                                    {isImporting ? <Icon name="loader-2" className="animate-spin text-left" size={18} /> : <Icon name="file-up" size={18} />}
                                     匯入題庫
                                     <input type="file" className="hidden" accept=".xlsx, .xls" onChange={importExcel} disabled={isImporting} />
                                 </label>
@@ -428,34 +425,34 @@
                             </div>
                         </div>
 
-                        <div className="grid gap-6">
+                        <div className="grid gap-6 text-left">
                             {questions.map((q, i) => (
                                 <div key={q.id} className={`bg-white p-8 rounded-[3rem] border-2 transition-all shadow-lg flex flex-col md:flex-row gap-8 items-start relative ${gameState.activeQuestionId===q.id?'border-teal-500 ring-8 ring-teal-50':'border-transparent hover:border-slate-100'}`}>
                                     <div className="flex md:flex-col items-center gap-3 text-slate-200 self-stretch md:self-auto justify-center text-left">
-                                        <Icon name="grip-vertical" size={24} className="opacity-20" />
-                                        <span className="font-black text-sm opacity-40">#{i+1}</span>
+                                        <Icon name="grip-vertical" size={24} className="opacity-20 text-left" />
+                                        <span className="font-black text-sm opacity-40 text-left">#{i+1}</span>
                                     </div>
-                                    <div className="flex-1 w-full space-y-6 text-left text-left">
+                                    <div className="flex-1 w-full space-y-6 text-left">
                                         <div className="flex justify-between items-start gap-4 text-left">
-                                            <h4 className="font-bold text-xl text-slate-800 leading-relaxed text-left">{q.text}</h4>
+                                            <h4 className="font-bold text-xl text-slate-800 leading-relaxed text-left text-left">{q.text}</h4>
                                             <div className="flex gap-2 shrink-0">
-                                                <button onClick={() => { setEditId(q.id); setForm(q); setIsModalOpen(true); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-all"><Icon name="edit-3" size={20} /></button>
-                                                <button onClick={() => deleteDoc(doc(db, ...getCollectionPath('questions'), q.id))} className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-all"><Icon name="trash-2" size={20} /></button>
+                                                <button onClick={() => { setEditId(q.id); setForm(q); setIsModalOpen(true); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-all text-left"><Icon name="edit-3" size={20} /></button>
+                                                <button onClick={() => confirm("刪除？") && deleteDoc(doc(db, ...getCollectionPath('questions'), q.id))} className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-all text-left text-left"><Icon name="trash-2" size={20} /></button>
                                             </div>
                                         </div>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
                                             {q.options.map((opt, idx) => (
                                                 <div key={idx} className={`p-4 rounded-2xl border font-bold text-sm flex justify-between items-center ${q.correctAnswer === idx ? 'border-teal-500 bg-teal-50 text-teal-600' : 'border-slate-50 text-slate-400 bg-slate-50/50'}`}>
-                                                    <span>{String.fromCharCode(65+idx)}. {opt}</span>
+                                                    <span className="text-left">{String.fromCharCode(65+idx)}. {opt}</span>
                                                     {q.correctAnswer === idx && <Icon name="check-circle-2" size={16} />}
                                                 </div>
                                             ))}
                                         </div>
-                                        <div className="pt-4 border-t border-slate-50 text-left">
+                                        <div className="pt-4 border-t border-slate-50 text-left text-left">
                                             {gameState.activeQuestionId === q.id && gameState.status === 'active' ? (
                                                 <button onClick={() => updateConfig({ status: 'idle', activeQuestionId: null })} className="w-full bg-red-500 text-white py-4 rounded-2xl font-black shadow-lg hover:bg-red-600 transition-all text-center">停止搶答</button>
                                             ) : (
-                                                <button onClick={() => updateConfig({ activeQuestionId: q.id, status: 'active', startTime: Date.now() })} className="w-full bg-gradient-to-r from-teal-500 to-blue-600 text-white py-4 rounded-2xl font-black shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all text-center">
+                                                <button onClick={() => updateConfig({ activeQuestionId: q.id, status: 'active', startTime: Date.now() })} className="w-full bg-gradient-to-r from-teal-500 to-blue-600 text-white py-4 rounded-2xl font-black shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all text-center text-center">
                                                     <Icon name="play" size={20} /> 啟動本題
                                                 </button>
                                             )}
@@ -468,20 +465,20 @@
 
                     {isModalOpen && (
                         <div className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-xl flex items-center justify-center p-6 text-left">
-                            <div className="bg-white w-full max-w-xl rounded-[3.5rem] shadow-2xl overflow-hidden text-left">
-                                <div className="bg-teal-500 p-10 text-white relative">
-                                    <h3 className="text-3xl font-black flex items-center gap-3"><Icon name="edit-3" /> {editId ? '修改題目' : '新增題目'}</h3>
-                                    <button onClick={() => { setIsModalOpen(false); setEditId(null); }} className="absolute top-10 right-10 text-white/50 hover:text-white transition-all"><Icon name="x" size={32} /></button>
+                            <div className="bg-white w-full max-w-xl rounded-[3.5rem] shadow-2xl overflow-hidden text-left text-left">
+                                <div className="bg-teal-500 p-10 text-white relative text-left">
+                                    <h3 className="text-3xl font-black flex items-center gap-3 text-left"><Icon name="edit-3" /> {editId ? '修改題目' : '新增題目'}</h3>
+                                    <button onClick={() => { setIsModalOpen(false); setEditId(null); }} className="absolute top-10 right-10 text-white/50 hover:text-white transition-all text-left"><Icon name="x" size={32} /></button>
                                 </div>
                                 <div className="p-10 space-y-8 text-left">
                                     <div className="space-y-2 text-left">
-                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest px-2">題目描述</label>
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest px-2 text-left text-left">題目描述</label>
                                         <textarea value={form.text} onChange={e => setForm({...form, text: e.target.value})} className="w-full p-6 rounded-3xl border-2 border-slate-50 bg-slate-50 focus:border-teal-500 outline-none font-bold text-lg text-left" rows="2" />
                                     </div>
                                     <div className="space-y-3 text-left">
-                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest px-2">選項內容與正確答案</label>
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest px-2 text-left">選項內容與正確答案</label>
                                         {form.options.map((opt, idx) => (
-                                            <div key={idx} className="flex gap-3 items-center">
+                                            <div key={idx} className="flex gap-3 items-center text-left">
                                                 <button onClick={() => setForm({...form, correctAnswer: idx})} className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl transition-all ${form.correctAnswer === idx ? 'bg-teal-500 text-white shadow-lg' : 'bg-slate-50 text-slate-300 hover:bg-slate-100'}`}>{String.fromCharCode(65+idx)}</button>
                                                 <input value={opt} onChange={e => {
                                                     const newOpts = [...form.options]; newOpts[idx] = e.target.value;
@@ -522,16 +519,10 @@
                 if (!user || myRes || countdown > 0 || !q) return;
                 const isCorrect = idx === q.correctAnswer;
                 const timeTaken = Date.now() - (gameState.startTime + 3000);
-                
                 await addDoc(collection(db, ...getCollectionPath('responses')), {
-                    userId: user.uid,
-                    userName,
-                    questionId: q.id,
-                    selectedOption: idx,
-                    isCorrect,
-                    timeTaken: Math.max(0, timeTaken),
-                    timestamp: Date.now()
-                }).catch(e => console.error("Submit Error:", e));
+                    userId: user.uid, userName, questionId: q.id, selectedOption: idx,
+                    isCorrect, timeTaken: Math.max(0, timeTaken), timestamp: Date.now()
+                }).catch(e => console.error(e));
             };
 
             if (gameState.showFinalResults) {
@@ -548,23 +539,14 @@
                 );
             }
 
-            if (gameState.status === 'active' && gameState.activeQuestionId && !q) {
-                return (
-                    <div className="py-32 bg-white rounded-[4rem] border border-teal-50 text-center flex flex-col items-center shadow-2xl text-center">
-                        <Icon name="loader-2" size={48} className="text-teal-500 animate-spin mb-4 text-center" />
-                        <h2 className="text-xl font-bold text-slate-400">正在讀取題目資料...</h2>
-                    </div>
-                );
-            }
-
             if (gameState.status === 'idle' || !q) {
                 return (
                     <div className="py-32 bg-white rounded-[4rem] border border-teal-50 text-center flex flex-col items-center shadow-2xl text-center">
                         <div className="relative mb-10 text-center">
-                            <div className="absolute inset-0 bg-teal-100 rounded-full animate-ping opacity-20 scale-150"></div>
-                            <Icon name="loader-2" size={80} className="text-teal-500 animate-spin text-center" />
+                            <div className="absolute inset-0 bg-teal-100 rounded-full animate-ping opacity-20 scale-150 text-center text-center"></div>
+                            <Icon name="loader-2" size={80} className="text-teal-500 animate-spin text-center text-center" />
                         </div>
-                        <h2 className="text-3xl font-black text-slate-800 text-center">等待主持人出題...</h2>
+                        <h2 className="text-3xl font-black text-slate-800 text-center text-center">等待主持人出題...</h2>
                         <p className="text-slate-400 mt-6 font-bold text-xl tracking-widest uppercase flex items-center gap-2 justify-center text-center">
                             <Icon name="user" size={20} className="text-teal-500" /> Hello {userName}
                         </p>
@@ -575,37 +557,35 @@
             return (
                 <div className="space-y-8 relative text-left text-left">
                     {countdown > 0 && (
-                        <div className="fixed inset-0 z-[100] bg-teal-500/95 flex flex-col items-center justify-center text-white backdrop-blur-2xl text-center text-center">
-                            <div className="text-[15rem] font-black animate-pulse leading-none">{countdown}</div>
-                            <div className="text-4xl font-black tracking-[0.5em] mt-8 text-center uppercase text-center">準備搶答</div>
+                        <div className="fixed inset-0 z-[100] bg-teal-500/95 flex flex-col items-center justify-center text-white backdrop-blur-2xl text-center">
+                            <div className="text-[15rem] font-black animate-pulse leading-none text-center">{countdown}</div>
+                            <div className="text-4xl font-black tracking-[0.5em] mt-8 uppercase text-center text-center">準備搶答</div>
                         </div>
                     )}
-
-                    <div className="bg-white p-8 sm:p-12 rounded-[3.5rem] shadow-2xl border-t-[16px] border-teal-500 text-left text-left">
-                        <div className="flex justify-between items-center mb-10 text-left text-left text-left text-left">
+                    <div className="bg-white p-8 sm:p-12 rounded-[3.5rem] shadow-2xl border-t-[16px] border-teal-500 text-left text-left text-left text-left">
+                        <div className="flex justify-between items-center mb-10 text-left">
                             <span className="px-5 py-2 bg-teal-50 text-teal-600 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-2 text-left">
                                 <Icon name="timer" size={16} className="animate-pulse" /> 搶答中
                             </span>
                             <span className="text-sm font-black text-slate-400 flex items-center gap-2 text-left text-left text-left"><Icon name="user" size={18} /> {userName}</span>
                         </div>
-                        <h2 className="text-3xl sm:text-4xl font-black mb-12 text-slate-800 leading-snug text-left text-left text-left">{q.text}</h2>
+                        <h2 className="text-3xl sm:text-4xl font-black mb-12 text-slate-800 leading-snug text-left text-left">{q.text}</h2>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 text-left text-left text-left">
                             {q.options.map((opt, i) => (
                                 <button key={i} disabled={!!myRes || countdown > 0} onClick={() => submitAnswer(i)} 
-                                    className={`p-6 text-left rounded-3xl border-4 font-black transition-all flex justify-between items-center text-xl min-h-[100px] active:scale-95 ${
+                                    className={`p-6 text-left rounded-3xl border-4 font-black transition-all flex justify-between items-center text-xl min-h-[100px] active:scale-95 text-left ${
                                         !myRes ? (countdown > 0 ? 'bg-slate-50 border-slate-100 opacity-40 cursor-not-allowed' : 'bg-white border-slate-100 hover:border-blue-500 hover:bg-teal-50 shadow-sm') 
                                         : (i === q.correctAnswer ? 'bg-teal-50 border-teal-500 text-teal-700' : (i === myRes.selectedOption ? 'bg-red-50 border-red-300 text-red-600' : 'opacity-20 border-transparent text-slate-300'))
                                     }`}>
-                                    <span><span className="opacity-20 mr-4 text-2xl font-black italic">{String.fromCharCode(65+i)}</span> {opt}</span>
+                                    <span className="text-left text-left text-left text-left"><span className="opacity-20 mr-4 text-2xl font-black italic text-left">{String.fromCharCode(65+i)}</span> {opt}</span>
                                     {myRes && i === q.correctAnswer && <Icon name="check-circle-2" size={32} className="text-teal-500" />}
                                     {myRes && i === myRes.selectedOption && i !== q.correctAnswer && <Icon name="x-circle" size={32} className="text-red-500" />}
                                 </button>
                             ))}
                         </div>
                     </div>
-
-                    <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-slate-50 text-left text-left text-left">
-                        <h3 className="text-xl font-black mb-8 flex items-center gap-3 border-b border-slate-50 pb-6 text-slate-800 text-left text-left">
+                    <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-slate-50 text-left">
+                        <h3 className="text-xl font-black mb-8 flex items-center gap-3 border-b border-slate-50 pb-6 text-slate-800 text-left text-left text-left">
                             <Icon name="layout-list" className="text-blue-500" /> 即時答題看板
                         </h3>
                         <LeaderboardDisplay mode={gameState.rankingMode} ranking={cumulativeRanking} winners={winnersPerQuestion} />
@@ -617,13 +597,13 @@
         function LeaderboardDisplay({ mode, ranking, winners }) {
             if (mode === 'cumulative') {
                 return (
-                    <div className="space-y-4 text-left text-left">
+                    <div className="space-y-4 text-left">
                         {ranking.map((res, i) => (
                             <div key={res.userName} className="flex justify-between items-center p-6 bg-slate-50 rounded-[2.5rem] border border-white hover:bg-white hover:shadow-lg transition-all text-left">
                                 <div className="flex items-center gap-6 text-left">
                                     <div className={`w-12 h-12 rounded-full flex items-center justify-center font-black text-xl shadow-md text-left ${i===0?'bg-yellow-400 text-white':i===1?'bg-slate-300 text-white':i===2?'bg-orange-300 text-white':'bg-white text-slate-300 border'}`}>{i+1}</div>
                                     <div className="text-left">
-                                        <span className="font-black text-slate-700 text-2xl text-left">{res.userName}</span>
+                                        <span className="font-black text-slate-700 text-2xl text-left text-left">{res.userName}</span>
                                         <div className="text-[10px] font-bold text-slate-300 uppercase tracking-tighter mt-0.5 text-left">累積耗時: {(res.totalTime/1000).toFixed(2)}s</div>
                                     </div>
                                 </div>
@@ -634,23 +614,22 @@
                     </div>
                 );
             }
-
             return (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 text-left text-left text-left">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 text-left text-left">
                     {winners.map((w, i) => (
                         <div key={i} className="p-6 border-2 border-slate-50 rounded-[2.5rem] bg-slate-50/50 hover:bg-white transition-all text-left text-left text-left">
-                            <div className="text-[10px] font-black text-teal-500 mb-3 uppercase tracking-widest text-left text-left">Question {w.questionIndex}</div>
-                            <h4 className="font-bold text-slate-800 line-clamp-1 mb-6 text-left text-left">{w.text}</h4>
+                            <div className="text-[10px] font-black text-teal-500 mb-3 uppercase tracking-widest text-left">Question {w.questionIndex}</div>
+                            <h4 className="font-bold text-slate-800 line-clamp-1 mb-6 text-left">{w.text}</h4>
                             {w.winner ? (
-                                <div className="bg-teal-50 p-4 rounded-3xl flex items-center gap-4 border border-teal-100 text-left text-left text-left">
-                                    <div className="p-3 bg-teal-500 rounded-2xl text-white shadow-md text-left text-left"><Icon name="crown" size={20} /></div>
-                                    <div className="min-w-0 text-left text-left">
-                                        <div className="font-black text-slate-800 text-lg truncate leading-tight text-left text-left">{w.winner.userName}</div>
-                                        <div className="text-[10px] font-bold text-teal-500 uppercase tracking-tighter mt-0.5 text-left text-left">{(w.winner.timeTaken/1000).toFixed(3)}s</div>
+                                <div className="bg-teal-50 p-4 rounded-3xl flex items-center gap-4 border border-teal-100 text-left text-left">
+                                    <div className="p-3 bg-teal-500 rounded-2xl text-white shadow-md text-left"><Icon name="crown" size={20} /></div>
+                                    <div className="min-w-0 text-left text-left text-left">
+                                        <div className="font-black text-slate-800 text-lg truncate leading-tight text-left">{w.winner.userName}</div>
+                                        <div className="text-[10px] font-bold text-teal-500 uppercase tracking-tighter mt-0.5 text-left">{(w.winner.timeTaken/1000).toFixed(3)}s</div>
                                     </div>
                                 </div>
                             ) : (
-                                <div className="py-6 text-center text-slate-200 text-sm font-black italic border-2 border-dotted rounded-3xl text-center text-center">待揭曉</div>
+                                <div className="py-6 text-center text-slate-200 text-sm font-black italic border-2 border-dotted rounded-3xl text-center">待揭曉</div>
                             )}
                         </div>
                     ))}
